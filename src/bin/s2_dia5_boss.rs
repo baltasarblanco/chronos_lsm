@@ -1,4 +1,4 @@
-use std::io::{self, Write}; // Traemos herramientas de entrada/salida
+ use std::io::{self, Write}; // Traemos herramientas de entrada/salida
 
 // 1. EL LENGUAJE INTERNO (Lo seguro)
 #[derive(Debug)]
