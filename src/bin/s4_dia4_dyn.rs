@@ -29,7 +29,7 @@ struct Borrado {
     clave: String,
 }
 
-impl Registrable f  or Borrado {
+impl Registrable for Borrado {
     fn describir(&self) -> String {
         format!("DELTE '{}'", self.clave)
     }

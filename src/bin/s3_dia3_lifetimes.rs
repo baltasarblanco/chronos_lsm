@@ -7,7 +7,7 @@ fn main() {
         
         // Pasamos Thor (vida larga) y Hulk (vida corta).
         // El lifeime 'a se ajusta al MÁS CORTO (Hulk).
-        resultado = el_mas_largo(heroe1.as_str(), heroe2.as_str());
+        // resultado = el_mas_largo(heroe1.as_str(), heroe2.as_str());
 
 
         println!("Dentro del scope: {}", resultado); // Esto funciona

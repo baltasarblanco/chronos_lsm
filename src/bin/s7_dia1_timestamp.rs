@@ -38,9 +38,9 @@ impl TimeTravelStore {
     // --- FUNCIÓN AUXILIAR PARA OBTENER TIEMPO ACTUAL ---
     fn current_time() -> u64 {
         let start = SystemTime::now();
-        stat.duration_since(UNIX_EPOCH);
-            .exect("Time went backwards")   
-            .as_millis() as u64
+        start.duration_since(UNIX_EPOCH)
+             .expect("Time went backwards")   
+             .as_millis() as u64
     }
 
     // 1. SET: AHORA GUARDA CON SELLO DE TIEMPO
@@ -61,7 +61,7 @@ impl TimeTravelStore {
             key: key.clone(),
             value,
             timestamp: now
-        }
+        };
 
         bincode::serialize_into(&mut writer, &entry).map_err(|e| e.to_string())?;
         writer.flush().map_err(|e| e.to_string())?;
@@ -81,7 +81,7 @@ impl TimeTravelStore {
     
 
     // 3. GET (ClÁSICO): DEVUELVE EL ÚLTIMO VALOR (EL PRESENTE)
-    pub fn get_latest(&self, key, &str) -> Result<Option<String>, String> {
+    pub fn get_latest(&self, key: &str) -> Result<Option<String>, String> {
         // Buscamos la historia
         if let Some(history) = self.index.get(key) {
             // .last() nos da el elemento mas reciente del vector
@@ -105,7 +105,7 @@ impl TimeTravelStore {
 fn main() {
     let ruta = "chronos_time.db";
     let _ = std::fs::remove_file(ruta);
-    let mud db = TimeTravelStore::new(ruta).unwrap();
+    let mut db = TimeTravelStore::new(ruta).unwrap();
 
     println!(">>> 🕰️ INICIANDO SIMULACIÓN TEMPORAL <<<");
 
@@ -113,7 +113,7 @@ fn main() {
     db.set("precio_btc".to_string(), "50,000".to_string()).unwrap();
 
     // Simulamos que pasa un poco de tiempo (dormimos el hilo 10ms)
-    std:thread::sleep(std::time::Duration::from_millis(10));
+    std::thread::sleep(std::time::Duration::from_millis(10));
 
     // T=10
     db.set("precio_btc".to_string(), "51,000".to_string()).unwrap();
@@ -124,8 +124,8 @@ fn main() {
     db.set("precio_btc".to_string(), "49,000".to_string()).unwrap();
 
     println!(">>> 📜 HISTORIAL EN RAM PARA 'precios_btc':");
-    if let Some(historia) = db.index.iter().enumarate() {
-        for (i, (t, off)) in historia.iter().enumarate() {
+    if let Some(historia) = db.index.get("precio_btc") {
+        for (i, (t, off)) in historia.iter().enumerate() {
             println!("   Evento #{}: Tiempo={}ms, Offset={}", i, t, off);
 
         }

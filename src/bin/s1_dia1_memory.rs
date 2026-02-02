@@ -21,7 +21,7 @@ fn main() {
     // --- LA ZONA DE LA MUERTE ---
     // 1. Ejecuta primero con esto COMENTADO (con //).
     // 2. LUEGO: Quita las // y mira cómo el compilador te grita.
-    println!("El fantasma de s1: {}", s1);
+    // println!("El fantasma de s1: {}", s1);
 
     println!("El nuevo dueño s2: {}", s2);
 }
