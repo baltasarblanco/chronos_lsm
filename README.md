@@ -93,9 +93,9 @@ Stress Test: A "Heavy Read" (simulated 5s delay) does NOT block other clients. W
 
 ## 🗺️ Roadmap (Project AETHER)
 1.  **[x] Phase 1: The Engine (LSM Tree, Memory Management)**
-2.  **Phase 2: The Network (TCP Server, Protocol Parser)**
-3.  **Phase 3: The Persistence (WAL, Crash Recovery)**
-4.  **Phase 4: Distributed Computing (AETHER)**
+2.  **[x] Phase 2: The Network (TCP Server, Protocol Parser)**
+3.  **[x] Phase 3: The Persistence (WAL, Crash Recovery)**
+4.  **[x] Phase 4: Distributed Computing (AETHER)**
     - Implement a WebAssembly (WASM) runtime to allow users to upload custom logic.
     - Transform Chronos from a passive DB into an active Stream Processor.
 
