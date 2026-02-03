@@ -2,3 +2,7 @@
 *.db
 *.db
 *.db
+*.db
+*.bin
+*.log
+archivo_secreto.txt
