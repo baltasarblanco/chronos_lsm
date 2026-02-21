@@ -1,10 +1,11 @@
 use std::collections::HashMap;
-use std::fs::{File, OpenOptions};
+use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::{Arc, RwLock}; // El secreto de la velocidad
+use std::sync::{Arc, RwLock};
 use std::thread;
-use std::time::Duration;
+
+const DB_PATH: &str = "chronos_v3.db";
 
 struct Engine {
     map: HashMap<String, String>,
@@ -14,6 +15,7 @@ struct Engine {
 impl Engine {
     fn new(filepath: &str) -> io::Result<Self> {
         let path = filepath.to_string();
+        // Abrimos el archivo en modo Append
         let file = OpenOptions::new()
             .create(true)
             .read(true)
@@ -21,7 +23,7 @@ impl Engine {
             .open(&path)?;
 
         let mut map = HashMap::new();
-        println!("   📜 Rehidratando memoria desde '{}'...", path);
+        println!("   📜 Rehidradanto memoria desde '{}'...", path);
         let reader = BufReader::new(file.try_clone()?);
 
         for line in reader.lines() {
@@ -40,81 +42,97 @@ impl Engine {
 
     fn set(&mut self, key: &str, value: &str) -> io::Result<()> {
         self.map.insert(key.to_string(), value.to_string());
-        writeln!(self.log_file, "{},{}", key, value)?; 
+        writeln!(self.log_file, "{},{}", key, value)?;
         Ok(())
     }
 
     fn get(&self, key: &str) -> Option<&String> {
         self.map.get(key)
     }
+
+    // 🧹 EL COMPACTADOR: La nueva función estrella
+    fn compact(&mut self) -> io::Result<()> {
+        let temp_path = "chronos_temp.db";
+        println!("   🧹 Iniciando Compactación (Garbage Colecction)...");
+
+        // 1. Crear el archivo temporal limpio
+        let mut temp_file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(temp_path)?;
+
+        // 2. Volcar SOLO la memoria actual (que ya está limpia) al disco
+        for (key, value) in &self.map {
+            writeln!(temp_file, "{},{}", key, value)?;
+        }
+
+        // Forzamos que se escriba todo en disco físico
+        temp_file.sync_all()?;
+
+        // 3. Reemplazo Atómica (El truco de magia)
+        // Renombrar es una operación atómica en el sistema operativo.
+        // Si falla la luz aqui, no perdemos datos ( o tenemos el viejo o el nuevo.)
+        fs::rename(temp_path, DB_PATH)?;
+
+        // 4. Reabrir el archivo log apuntando al nuevo archivo limpio
+        self.log_file = OpenOptions::new()
+            .create(true)
+            .read(true)
+            .append(true)
+            .open(DB_PATH)?;
+
+        println!("   ✨ Compactación terminada. Basura eliminada.");
+        Ok(())
+    }
 }
 
-// 🧬 EL ADN CONCURRENTE
 type Db = Arc<RwLock<Engine>>;
 
 fn handle_client(mut stream: TcpStream, db: Db) {
     let mut buffer = [0; 512];
-    // Manejo seguro de la dirección del cliente
-    let peer_addr = match stream.peer_addr() {
-        Ok(addr) => addr.to_string(),
-        Err(_) => "Unknown".to_string(),
-    };
-
     loop {
         match stream.read(&mut buffer) {
             Ok(bytes_read) => {
                 if bytes_read == 0 {
                     break;
-                } // Conexión cerrada
-
+                }
                 let raw_msg = String::from_utf8_lossy(&buffer[..bytes_read]);
                 let command_line = raw_msg.trim();
                 if command_line.is_empty() {
                     continue;
                 }
 
-                println!("   📩 [{}]: '{}'", peer_addr, command_line);
                 let parts: Vec<&str> = command_line.split_whitespace().collect();
 
                 let response = match parts.as_slice() {
                     ["SET", key, value] => {
-                        // 🔒 WRITE LOCK (Exclusivo - Bloquea todo)
-                        // Usamos .write().unwrap() para obtener acceso mutable
                         let mut engine = db.write().unwrap();
                         match engine.set(key, value) {
-                            Ok(_) => format!("💾 OK. Guardado '{}'.\n", key),
-                            Err(e) => format!("🔥 ERROR: {}\n", e),
+                            Ok(_) => "OK\n".to_string(),
+                            Err(e) => format!("ERR {}\n", e),
                         }
                     }
-
                     ["GET", key] => {
-                        // 🔓 READ LOCK (Compartido - Permite otros lectores)
-                        // Usamos .read().unwrap() para obtener acceso de lectura
                         let engine = db.read().unwrap();
-
-                        // 🐢 SIMULACIÓN DE CARGA (La Tortuga)
-                        if *key == "heavy" {
-                            println!("   🐢 [Hilo] Iniciando operación pesada (5s)...");
-                            thread::sleep(Duration::from_secs(5));
-                            println!("   🐇 [Hilo] Operación pesada terminada.");
-                        }
-
                         match engine.get(key) {
-                            Some(v) => format!("💎 VALOR: '{}'\n", v),
-                            None => format!("🤷‍♂️ No existe '{}'\n", key),
+                            Some(v) => format!("{}\n", v),
+                            None => "NULL\n".to_string(),
                         }
                     }
-
-                    ["PING"] => "PONG\n".to_string(),
-
-                    ["EXIT"] => {
-                        break;
+                    ["COMPACT"] => {
+                        // <---- COMANDO NUEVO
+                        // Necesitamos Write Lock porque vamos a tocar el archivo
+                        let mut engine = db.write().unwrap();
+                        match engine.compact() {
+                            Ok(_) => "OK_COMPACTED\n".to_string(),
+                            Err(e) => format!("ERR_COMPACT {}\n", e),
+                        }
                     }
-
-                    _ => "❌ ERROR: Comando desconocido\n".to_string(),
+                    ["PING"] => "PONG\n".to_string(),
+                    _ => "UNKNOWN\n".to_string(),
                 };
-
-                if let Err(_) = stream.write_all(response.as_bytes()) {
+                if stream.write_all(response.as_bytes()).is_err() {
                     break;
                 }
             }
@@ -126,15 +144,13 @@ fn handle_client(mut stream: TcpStream, db: Db) {
 }
 
 fn main() {
-    let engine = Engine::new("chronos_v3.db").expect("Fallo DB");
-    // Envolvemos el motor en Arc<RwLock<...>>
+    // Usamos el mismo DB_PATH
+    let engine = Engine::new(DB_PATH).expect("Fallo DB");
     let global_db = Arc::new(RwLock::new(engine));
 
     let listener = TcpListener::bind("127.0.0.1:8080").unwrap();
-    println!("-----------------------------------------");
-    println!("🚀 KLYNTAR v3.0 (HIGH PERFORMANCE) ACTIVO");
-    println!("   Modo: Read-Write Lock (Concurrencia Real)");
-    println!("-----------------------------------------");
+    println!("🚀 CHRONOS v3.1 (CON COMPACTADOR) LISTO");
+    println!("   Comandos: SET, GET, PING, COMPACT");
 
     for stream in listener.incoming() {
         match stream {

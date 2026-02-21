@@ -89,7 +89,7 @@ fn parsear_comando(input: &str) -> Result<Comando, String> {
         _ => Err(String::from("Comando no reconocido o falta de argumentos")),
     }
 }
-=======
+
 use std::io::{self, Write}; // Traemos herramientas de entrada/salida
 
 // 1. EL LENGUAJE INTERNO (Lo seguro)
