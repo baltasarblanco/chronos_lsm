@@ -1,55 +1,62 @@
+// Este código va a abrir 50 conexiones TCP simultáneas y bombardeara el servidor midiendo los milisegundos exactos.
+
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::thread;
-
-// Configuración del ataque
-const N_THREADS: usize = 50; // 50 usuarios simultáneos
-const N_REQUESTS: usize = 100; // Cada usuario hace 100 peticiones
+use std::time::Instant;
 
 fn main() {
-    println!("🔥 INICIANDO PRUEBA DE ESTRÉS (WRITE STORM) 🔥");
-    println!("   Objetivo: localhost:8080");
-    println!("   Hilos (Usuarios): {}", N_THREADS);
-    println!("   Peticiones por usuario: {}", N_REQUESTS);
-    println!("------------------------------------------------");
+    let num_threads = 50;
+    let requests_per_thread = 100; // 50 * 100 = 5,000 peticiones en total
 
+    println!("🚀 Iniciando Benchmark Chronos...");
+    println!(
+        "  Lanzando {} hilos con {} peticiones cada uno por red TCP.",
+        num_threads, requests_per_thread
+    );
+
+    // Arrancamos el cronómetro
+    let start_time = Instant::now();
     let mut handles = vec![];
 
-    // 1. Lanzamos la Horda
-    for id in 0..N_THREADS {
+    for i in 0..num_threads {
         let handle = thread::spawn(move || {
-            // Cada hilo simula se un cliente distinto
+            // Cada hilo sed conecta como un cliente independiente a tu servidor
             if let Ok(mut stream) = TcpStream::connect("127.0.0.1:8080") {
-                for i in 0..N_REQUESTS {
-                    // Esto va de 0 a 99
-                    let key = format!("user_{}", id); // user_1, user_2...
-                    let value = format!("data_{}", i); // data_0, data_1...
+                for j in 0..requests_per_thread {
+                    // Enviamos un comando SET
+                    let msg = format!("SET banch_key_{}_{} benchmark_value\n", i, j);
+                    let _ = stream.write_all(msg.as_bytes());
 
-                    let command = format!("SET {} {} \n", key, value);
-
-                    // Intentamos escribir
-                    if stream.write_all(command.as_bytes()).is_err() {
-                        eprintln!("   ❌ Fallo al enviar comando dede Hilo {}", id);
-                        break;
-                    }
-
-                    // Leemos la respuesta ( para no saturar el buffer TCP )
-                    let mut buffer = [0; 521];
+                    // Leemos el "OK" de respuesta para confirmar
+                    let mut buffer = [0; 512];
                     let _ = stream.read(&mut buffer);
                 }
-                println!("   ✅ Hilo {} completó sus {} escrituras.", id, N_REQUESTS);
             } else {
-                eprintln!("   💀 Hilo {} no pudo conectarse al servidor.", id);
+                println!(
+                    "❌ Error: El hilo {} no pudo conectarse al servidor. ¿Está encendido?",
+                    i
+                );
             }
         });
         handles.push(handle);
     }
 
-    // 2. Esperamos a que todos terminen
+    // Esperamos a que todos los hilos terminen su ataque
     for handle in handles {
         handle.join().unwrap();
     }
 
-    println!("------------------------------------------------");
-    println!("🏁 PRUEBA FINALIZADA. Verifica si el servidor sigue vivo.");
+    // Paramos el cronómetro
+    let duration = start_time.elapsed();
+    let total_request = num_threads * requests_per_thread;
+    let ops_per_second = (total_request as f64 / duration.as_secs_f64()) as u64;
+
+    println!("--------------------------------------------------");
+    println!("⏱️  Tiempo total: {:?}", duration);
+    println!(
+        "🔥 Rendimiento: {} operaciones por segundo (ops/sec)",
+        ops_per_second
+    );
+    println!("--------------------------------------------------");
 }
