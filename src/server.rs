@@ -67,9 +67,18 @@ fn handle_client(mut stream: TcpStream, db: Db, peer_addr: String) {
                             Err(e) => format!("ERR {}\n", e),
                         }
                     }
+                    Command::Del(key) => {
+                        let mut engine = db.write().unwrap();
+                        // Insertamos la lápida usando el mismo motor SET
+                        match engine.set(&key, "__TOMBSTONE__") {
+                            Ok(_) => "OK_DELETED\n".to_string(),
+                            Err(e) => format!("ERR {}\n", e),
+                        }
+                    }
                     Command::Get(key) => {
                         let engine = db.read().unwrap();
                         match engine.get(&key) {
+                            Some(v) if v == "__TOMBSTONE__" => "NULL\n".to_string(), // Fingimos demencia
                             Some(v) => format!("{}\n", v),
                             None => "NULL\n".to_string(),
                         }
