@@ -15,42 +15,33 @@ Designed as an educational deep-dive into systems engineering, Chronos bridges t
 
 ## ⚡ Key Features
 
-### 🧠 **Symbiotic Architecture (The "Klyntar" Protocol)**
+### 🧠 **Symbiotic Architecture**
 - **Hybrid Storage Engine:** Uses an in-memory `MemTable` (HashMap) for nanosecond-latency reads and disk-based `SSTables` for long-term storage.
 - **Write-Ahead Log (WAL):** Guarantees **Durability (ACID)**. Every write is appended to a log file before acknowledgement. If the server crashes, Chronos replays the WAL upon restart to restore the state (0% Data Loss).
+- **Tombstone Deletion:** High-efficiency `DEL` command implementation that uses memory tombstones to mark records as deleted without triggering expensive disk re-writes.
 
 ### 🚀 **High-Performance Concurrency**
-- **Multithreaded Server:** Handles thousands of concurrent TCP connections using a thread-pool architecture.
+- **Multithreaded Server:** Handles concurrent TCP connections using thread spawning and safe memory sharing.
 - **Lock-Free Reads:** Implements `Arc<RwLock<T>>` to allow **multiple simultaneous readers** without blocking. Writers only block when absolutely necessary.
-- **Zero-Copy Parsing:** Custom protocol parser minimizes memory allocations during request handling.
+- **Graceful Shutdown:** Intercepts `SIGINT` (Ctrl+C) signals to safely block new connections, flush memory buffers to disk, and close TCP sockets without data corruption.
 
 ### 🛡️ **Self-Healing & Maintenance**
 - **Crash Recovery:** Automatic "Rehydration" mechanism restores database state from disk on boot.
-- **Compaction (Planned):** Background threads merge logs to prevent disk saturation and optimize read paths.
+- **Live Compaction:** In-memory garbage collection to prune tombstones and duplicated logs, optimizing the read path.
 
 ---
 
 ## 🛠️ Architecture Overview
 
-The system is composed of three distinct layers:
+The system is composed of three distinct layers, completely decoupled:
 
-1.  **The Interface (Network Layer):**
-    - Raw TCP Sockets.
-    - Custom Serialization Protocol (text-based for MVP, binary planned).
-2.  **The Brain (Concurrency Layer):**
-    - `Arc` (Atomic Reference Counting) for shared memory.
-    - `RwLock` (Read-Write Lock) for thread safety.
-3.  **The Core (Storage Layer):**
-    - **MemTable:** Volatile RAM storage.
-    - **WAL:** Append-only persistence file (`chronos.db`).
+1.  **The Interface (Network Layer - `server.rs`):** Raw TCP Sockets and Multithreading.
+2.  **The Parser (Translation Layer - `parser.rs`):** Zero-copy parsing transforming raw bytes into strict Command Enums.
+3.  **The Core (Storage Layer - `engine.rs`):** Volatile RAM storage and Append-only persistence file (`chronos.db`).
 
 ---
 
 ## 🚀 Quick Start
-
-### Prerequisites
-- Rust (latest stable)
-- Netcat (`nc`) for testing (or the upcoming Chronos CLI).
 
 ### 1. Clone the Repository
 ```bash
@@ -58,47 +49,43 @@ git clone [https://github.com/baltasarblanco/chronos_lsm.git](https://github.com
 cd chronos_lsm
 ```
 
-## 2. Run the Server (High Performance Mode)
+## 2. Run the Server
 ```bash
-cargo run --bin s9_dia1_velocity
+cargo run
 ```
-You should see:
+Expected Output:
 ```bash
-🚀 KLYNTAR v3.0 (HIGH PERFORMANCE) ACTIVE Mode: Read-Write Lock (Real Concurrency)
-```
-
-3. Connect via TCP
-Open a new terminal and act as a client:
-```bash
-nc 127.0.0.1 8080
+🚀 CHRONOS SERVER LISTO Y ESCUCHANDO EN TCP 127.0.0.1:8080
 ```
 
-4. Issue Commands
+## 3. Connect via the Interactive CLI
+Chronos includes its own built-in terminal client (similar to redis-cli). Open a second terminal and run:
 ```bash
-SET user:101 {"name": "Venom", "role": "Symbiote"}
-GET user:101
-PING
+cargo run --bin client
 ```
 
-## 🧪 Benchmarks & Performance
+## 4. Issue Commands
+```text
+chronos> SET user:101 {"name": "Venom", "role": "Symbiote"}
+OK
+chronos> GET user:101
+{"name": "Venom", "role": "Symbiote"}
+chronos> DEL user:101
+OK_DELETED
+chronos> COMPACT
+OK_COMPACTED
+```
 
-Tests performed on local environment (Dev Build).
+## 🧪 Benchmarks & Performance (Local Dev Build)
 
-Operation,Mechanism,Concurrency,Outcome
-Write (SET),Mutex Lock (Exclusive),1 Writer,Atomic Safety
-Read (GET),RwLock (Shared),Unlimited Readers,Non-Blocking
-Persistence,File Append (WAL),Sync,Crash Proof
-
-Stress Test: A "Heavy Read" (simulated 5s delay) does NOT block other clients. While one user performs a complex query, others can still ping and read instantly.
-
-## 🗺️ Roadmap (Project AETHER)
-1.  **[x] Phase 1: The Engine (LSM Tree, Memory Management)**
-2.  **[x] Phase 2: The Network (TCP Server, Protocol Parser)**
-3.  **[x] Phase 3: The Persistence (WAL, Crash Recovery)**
-4.  **[x] Phase 4: Distributed Computing (AETHER)**
-    - Implement a WebAssembly (WASM) runtime to allow users to upload custom logic.
-    - Transform Chronos from a passive DB into an active Stream Processor.
+| Operation | Mechanism | Concurrency | Outcome |
+| :--- | :--- | :--- | :--- |
+| Write (`SET`) | `RwLock` (Write) | 1 Exclusive Writer | Atomic Safety |
+| Read (`GET`) | `RwLock` (Read) | Unlimited Readers | Non-Blocking |
+| Delete (`DEL`) | Tombstone Injection | 1 Exclusive Writer | O(1) Deletion |
+| Persistence | File Append (WAL) | Sync | Crash Proof |
 
 ## 👨‍💻 Author
 
-Baltasar Blanco - Systems Engineer / Rustacean Building infrastructure from the atom up.
+Baltasar Blanco - Systems Engineer / Rustacean
+Building infrastructure from the atom up.
